@@ -6,6 +6,7 @@ Uma aplicação FastAPI super simples que permite que estudantes visualizem e se
 
 - Visualizar todas as atividades extracurriculares disponíveis
 - Inscrever-se em atividades
+- Visualizar participantes e cancelar uma inscrição pelo ícone de lixeira no card
 
 ## Primeiros Passos
 
@@ -31,6 +32,7 @@ Uma aplicação FastAPI super simples que permite que estudantes visualizem e se
 | ------ | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | GET    | `/activities`                                                     | Obtém todas as atividades com seus detalhes e contagem atual de participantes |
 | POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Inscreve-se em uma atividade                                                |
+| DELETE | `/activities/{activity_name}/signup?email=student@mergington.edu` | Cancela uma inscrição; retorna 404 se a atividade ou inscrição não existir |
 
 ## Modelo de Dados
 
