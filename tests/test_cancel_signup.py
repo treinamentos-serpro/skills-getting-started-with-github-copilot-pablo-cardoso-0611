@@ -1,66 +1,93 @@
 from copy import deepcopy
-from unittest import TestCase
-
-from fastapi.testclient import TestClient
-
-from src.app import activities, app
 
 
-class CancelSignupTests(TestCase):
-    def setUp(self):
-        self.original_activities = deepcopy(activities)
-        self.client = TestClient(app)
-        self.addCleanup(self.restore_activities)
-        self.addCleanup(self.client.close)
+def test_cancel_removes_only_selected_registration_and_allows_signup_again(
+    client, activity_data
+):
+    email = "michael@mergington.edu"
+    url = "/activities/Chess%20Club/signup"
+    params = {"email": email}
+    activity_data["Art Club"]["participants"].append(email)
+    expected = deepcopy(activity_data)
+    expected["Chess Club"]["participants"].remove(email)
 
-    def restore_activities(self):
-        activities.clear()
-        activities.update(self.original_activities)
+    response = client.delete(url, params=params)
 
-    def test_cancel_removes_only_selected_registration_and_frees_a_spot(self):
-        email = "michael@mergington.edu"
-        activity = "Chess Club"
-        other_participants = activities[activity]["participants"][1:]
-        self.client.post("/activities/Art%20Club/signup", params={"email": email})
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": f"Cancelled signup for {email} for Chess Club"
+    }
+    assert client.get("/activities").json() == expected
 
-        response = self.client.delete(
-            "/activities/Chess%20Club/signup", params={"email": email}
-        )
+    assert client.post(url, params=params).status_code == 200
+    expected["Chess Club"]["participants"].append(email)
+    assert client.get("/activities").json() == expected
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("message", response.json())
-        updated = self.client.get("/activities").json()
-        self.assertEqual(updated[activity]["participants"], other_participants)
-        self.assertIn(email, updated["Art Club"]["participants"])
-        self.assertEqual(
-            self.client.post(
-                "/activities/Chess%20Club/signup", params={"email": email}
-            ).status_code,
-            200,
-        )
 
-    def test_unknown_activity_returns_404_without_changes(self):
-        response = self.client.delete(
-            "/activities/Unknown/signup", params={"email": "michael@mergington.edu"}
-        )
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["detail"], "Activity not found")
-        self.assertEqual(activities, self.original_activities)
+def test_unknown_activity_returns_404_without_changes(client, activity_data):
+    before = deepcopy(activity_data)
 
-    def test_unknown_registration_returns_404_without_changes(self):
-        response = self.client.delete(
-            "/activities/Chess%20Club/signup", params={"email": "unknown@example.com"}
-        )
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(
-            response.json()["detail"], "Student is not signed up for this activity"
-        )
-        self.assertEqual(activities, self.original_activities)
+    response = client.delete(
+        "/activities/Unknown/signup", params={"email": "michael@mergington.edu"}
+    )
 
-    def test_last_participant_and_repeated_cancellation(self):
-        url = "/activities/Art%20Club/signup"
-        params = {"email": "student+art@example.com"}
-        self.assertEqual(self.client.post(url, params=params).status_code, 200)
-        self.assertEqual(self.client.delete(url, params=params).status_code, 200)
-        self.assertEqual(self.client.get("/activities").json()["Art Club"]["participants"], [])
-        self.assertEqual(self.client.delete(url, params=params).status_code, 404)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Activity not found"}
+    assert activity_data == before
+
+
+def test_unknown_registration_returns_404_without_changes(client, activity_data):
+    before = deepcopy(activity_data)
+
+    response = client.delete(
+        "/activities/Chess%20Club/signup", params={"email": "unknown@example.com"}
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": "Student is not signed up for this activity"
+    }
+    assert activity_data == before
+
+
+def test_missing_email_returns_422_without_changes(client, activity_data):
+    before = deepcopy(activity_data)
+
+    response = client.delete("/activities/Chess%20Club/signup")
+
+    assert response.status_code == 422
+    assert any(
+        error["loc"] == ["query", "email"] and error["type"] == "missing"
+        for error in response.json()["detail"]
+    )
+    assert activity_data == before
+
+
+def test_last_participant_and_repeated_cancellation(client, activity_data):
+    email = "student+art@example.com"
+    url = "/activities/Art%20Club/signup"
+    params = {"email": email}
+    before = deepcopy(activity_data)
+
+    assert client.post(url, params=params).status_code == 200
+    after_signup = client.get("/activities")
+    expected = deepcopy(before)
+    expected["Art Club"]["participants"].append(email)
+    assert after_signup.status_code == 200
+    assert after_signup.json() == expected
+
+    response = client.delete(url, params=params)
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": f"Cancelled signup for {email} for Art Club"
+    }
+    after_cancellation = client.get("/activities")
+    assert after_cancellation.status_code == 200
+    assert after_cancellation.json() == before
+
+    repeated = client.delete(url, params=params)
+    assert repeated.status_code == 404
+    assert repeated.json() == {
+        "detail": "Student is not signed up for this activity"
+    }
+    assert activity_data == before
