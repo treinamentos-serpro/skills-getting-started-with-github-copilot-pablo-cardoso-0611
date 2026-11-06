@@ -31,7 +31,7 @@ Uma aplicação FastAPI super simples que permite que estudantes visualizem e se
 Na raiz do repositório, instale as dependências de testes:
 
 ```bash
-python -m pip install -r requirements-test.txt
+python -m pip install -r requirements.txt
 ```
 
 Execute a suíte com pytest:
